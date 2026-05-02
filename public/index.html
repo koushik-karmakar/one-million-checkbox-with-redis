@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Checkbox Playground</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #f4f4f6;
+        font-family: system-ui, sans-serif;
+        padding: 2rem;
+        min-height: 100vh;
+      }
+      #app {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      #toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 1rem;
+        padding: 0.75rem 1.25rem;
+        background: #fff;
+        border: 1px solid #e0e0e4;
+        border-radius: 12px;
+      }
+      #toolbar h2 {
+        font-size: 15px;
+        font-weight: 500;
+        color: #1a1a1a;
+      }
+      .stat {
+        font-size: 13px;
+        color: #666;
+      }
+      .stat span {
+        font-weight: 500;
+        color: #1a1a1a;
+      }
+      #action-btns {
+        display: flex;
+        gap: 6px;
+      }
+      .action-btn {
+        font-size: 12px;
+        padding: 4px 10px;
+        border: 1px solid #d0d0d6;
+        border-radius: 8px;
+        background: transparent;
+        color: #555;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .action-btn:hover {
+        background: #f0f0f4;
+        color: #1a1a1a;
+      }
+      #container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 1rem 1.25rem;
+        background: #fff;
+        border: 1px solid #e0e0e4;
+        border-radius: 12px;
+      }
+      .cb {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        border: 1.5px solid #b0a8f8;
+        background: transparent;
+        cursor: pointer;
+        transition:
+          background 0.1s,
+          border-color 0.1s,
+          transform 0.08s;
+        position: relative;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+      .cb:hover {
+        transform: scale(1.2);
+        border-color: #7f77dd;
+      }
+      .cb:checked {
+        background: #7f77dd;
+        border-color: #7f77dd;
+      }
+      .cb:checked::after {
+        content: "";
+        position: absolute;
+        left: 27%;
+        top: 8%;
+        width: 38%;
+        height: 60%;
+        border-right: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        transform: rotate(40deg);
+      }
+      .cb:active {
+        transform: scale(0.9);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <h2>checkbox playground</h2>
+        <div class="stat">
+          checked: <span id="checked-count">0</span> / 10,000
+        </div>
+      </div>
+      <div id="container"></div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      window.addEventListener("load", async () => {
+        const response = await fetch("/state", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        const state = await response.json();
+        if (state && state.checkbox) {
+          state.checkbox.forEach((checked, index) => {
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.className = "cb";
+            input.id = `checkbox-${index}`;
+            input.checked = checked;
+            container.appendChild(input);
+            input.addEventListener("change", (event) => {
+              console.log(index, event.target.checked);
+              socket.emit("client:checkbox-change", {
+                index,
+                checked: event.target.checked,
+              });
+            });
+          });
+        }
+        console.log(state);
+      });
+
+      const socket = io();
+      const TOTAL = 100;
+      const container = document.getElementById("container");
+      const countEl = document.getElementById("checked-count");
+      let checked = 0;
+
+      function recount() {
+        checked = container.querySelectorAll(".cb:checked").length;
+        countEl.textContent = checked;
+      }
+
+      socket.on("server:checkbox-change", (data) => {
+        console.log(data);
+        const { index, checked } = data;
+        const checkbox = document.getElementById(`checkbox-${index}`);
+        if (checkbox) {
+          checkbox.checked = checked;
+        }
+      });
+    </script>
+  </body>
+</html>
