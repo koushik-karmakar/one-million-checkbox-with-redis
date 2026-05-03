@@ -142,7 +142,7 @@
             input.checked = checked;
             container.appendChild(input);
             input.addEventListener("change", (event) => {
-              console.log(index, event.target.checked);
+              // console.log(index, event.target.checked);
               socket.emit("client:checkbox-change", {
                 index,
                 checked: event.target.checked,
@@ -150,7 +150,7 @@
             });
           });
         }
-        console.log(state);
+        // console.log(state);
       });
 
       const socket = io();
@@ -165,7 +165,7 @@
       }
 
       socket.on("server:checkbox-change", (data) => {
-        console.log(data);
+        // console.log(data);
         const { index, checked } = data;
         const checkbox = document.getElementById(`checkbox-${index}`);
         if (checkbox) {
