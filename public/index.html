@@ -13,17 +13,18 @@
       body {
         background: #f4f4f6;
         font-family: system-ui, sans-serif;
-        padding: 2rem;
+        padding: 1.5rem;
         min-height: 100vh;
       }
       #app {
-        max-width: 960px;
+        max-width: 1080px;
         margin: 0 auto;
       }
+
+     
       #toolbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         flex-wrap: wrap;
         gap: 10px;
         margin-bottom: 1rem;
@@ -36,6 +37,7 @@
         font-size: 15px;
         font-weight: 500;
         color: #1a1a1a;
+        margin-right: auto;
       }
       .stat {
         font-size: 13px;
@@ -45,28 +47,109 @@
         font-weight: 500;
         color: #1a1a1a;
       }
-      #action-btns {
+
+      #online-badge {
         display: flex;
+        align-items: center;
         gap: 6px;
-      }
-      .action-btn {
         font-size: 12px;
-        padding: 4px 10px;
-        border: 1px solid #d0d0d6;
-        border-radius: 8px;
-        background: transparent;
         color: #555;
-        cursor: pointer;
-        transition: background 0.12s;
-      }
-      .action-btn:hover {
         background: #f0f0f4;
-        color: #1a1a1a;
+        border-radius: 20px;
+        padding: 4px 10px;
       }
+      #online-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #22c55e;
+        flex-shrink: 0;
+      }
+      #user-avatars {
+        display: flex;
+        gap: 3px;
+        margin-left: 4px;
+      }
+      .avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background: #7f77dd;
+        color: white;
+        font-size: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+      .avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .auth-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        border: none;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        transition: opacity 0.15s;
+      }
+      .auth-btn:hover {
+        opacity: 0.82;
+      }
+      .login-btn {
+        background: #7f77dd;
+        color: white;
+      }
+      .logout-btn {
+        background: #f0f0f4;
+        color: #555;
+        border: 1px solid #d0d0d6;
+      }
+
+ 
+      #auth-toast {
+        display: none;
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a1a;
+        color: white;
+        border-radius: 12px;
+        padding: 14px 20px;
+        font-size: 14px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        z-index: 100;
+        align-items: center;
+        gap: 14px;
+        max-width: 360px;
+        white-space: nowrap;
+      }
+      #auth-toast.show {
+        display: flex;
+      }
+      #auth-toast a {
+        color: #b0a8f8;
+        font-weight: 500;
+        text-decoration: none;
+      }
+
+
       #container {
         display: flex;
         flex-wrap: wrap;
-        gap: 4px;
+        gap: 3px;
         padding: 1rem 1.25rem;
         background: #fff;
         border: 1px solid #e0e0e4;
@@ -75,9 +158,9 @@
       .cb {
         appearance: none;
         -webkit-appearance: none;
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
         border: 1.5px solid #b0a8f8;
         background: transparent;
         cursor: pointer;
@@ -90,7 +173,7 @@
         flex-shrink: 0;
       }
       .cb:hover {
-        transform: scale(1.2);
+        transform: scale(1.25);
         border-color: #7f77dd;
       }
       .cb:checked {
@@ -117,61 +200,158 @@
     <div id="app">
       <div id="toolbar">
         <h2>checkbox playground</h2>
+
         <div class="stat">
           checked: <span id="checked-count">0</span> / 10,000
         </div>
+
+        <div id="online-badge">
+          <span id="online-dot"></span>
+          <span id="online-count">0</span> online
+          <div id="user-avatars"></div>
+        </div>
+
+        <div id="auth-area"></div>
       </div>
+
       <div id="container"></div>
     </div>
+
+    <div id="auth-toast">
+      <span>Please log in to interact</span>
+      <a href="/auth/cortex-login">Continue with Cortex →</a>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
-      window.addEventListener("load", async () => {
-        const response = await fetch("/state", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        const state = await response.json();
-        if (state && state.checkbox) {
-          state.checkbox.forEach((checked, index) => {
-            const input = document.createElement("input");
-            input.type = "checkbox";
-            input.className = "cb";
-            input.id = `checkbox-${index}`;
-            input.checked = checked;
-            container.appendChild(input);
-            input.addEventListener("change", (event) => {
-              // console.log(index, event.target.checked);
-              socket.emit("client:checkbox-change", {
-                index,
-                checked: event.target.checked,
-              });
-            });
-          });
-        }
-        // console.log(state);
-      });
-
-      const socket = io();
-      const TOTAL = 100;
       const container = document.getElementById("container");
       const countEl = document.getElementById("checked-count");
-      let checked = 0;
+      const authArea = document.getElementById("auth-area");
+      const onlineCount = document.getElementById("online-count");
+      const userAvatars = document.getElementById("user-avatars");
+      const authToast = document.getElementById("auth-toast");
 
-      function recount() {
-        checked = container.querySelectorAll(".cb:checked").length;
-        countEl.textContent = checked;
+      let currentUser = null;
+      let toastTimer = null;
+
+      // ================= load current user ================
+      async function loadUser() {
+        const res = await fetch("/me");
+        const data = await res.json();
+        currentUser = data.user;
+        renderAuthArea(data.isAuthenticated, data.user);
       }
 
-      socket.on("server:checkbox-change", (data) => {
-        // console.log(data);
-        const { index, checked } = data;
-        const checkbox = document.getElementById(`checkbox-${index}`);
-        if (checkbox) {
-          checkbox.checked = checked;
+      function renderAuthArea(isAuth, user) {
+        if (isAuth && user) {
+          authArea.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;color:#666">
+                Hi, <strong style="color:#1a1a1a">${user.name.split(" ")[0]}</strong>
+              </span>
+              <a class="auth-btn logout-btn" href="/auth/logout">Logout</a>
+            </div>`;
+        } else {
+          authArea.innerHTML = `
+            <a class="auth-btn login-btn" href="/auth/cortex-login">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+              Login with Cortex
+            </a>`;
+        }
+      }
+
+      // =====================  render checkboxes ===================================
+      async function initCheckboxes() {
+        const res = await fetch("/state");
+        const data = await res.json();
+        const state = data.checkbox || new Array(10000).fill(false);
+
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < state.length; i++) {
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.className = "cb";
+          input.id = `cb-${i}`;
+          input.checked = state[i] || false;
+          input.addEventListener("change", (e) => {
+            if (!currentUser) {
+              e.target.checked = !e.target.checked;
+              showAuthToast();
+              return;
+            }
+            socket.emit("client:checkbox-change", {
+              index: i,
+              checked: e.target.checked,
+            });
+          });
+          frag.appendChild(input);
+        }
+        container.appendChild(frag);
+        recount();
+      }
+
+      function recount() {
+        countEl.textContent = container.querySelectorAll(".cb:checked").length;
+      }
+
+      // ========================  users  =================================
+      function updateOnlineUsers(data) {
+        onlineCount.textContent = data.count;
+        userAvatars.innerHTML = "";
+        const show = data.users.slice(0, 5);
+        for (const u of show) {
+          const div = document.createElement("div");
+          div.className = "avatar";
+          div.title = u.name;
+          if (u.picture) {
+            const img = document.createElement("img");
+            img.src = u.picture;
+            img.alt = u.name;
+            div.appendChild(img);
+          } else {
+            div.textContent = u.name.charAt(0).toUpperCase();
+          }
+          userAvatars.appendChild(div);
+        }
+        if (data.users.length > 5) {
+          const more = document.createElement("div");
+          more.className = "avatar";
+          more.textContent = `+${data.users.length - 5}`;
+          userAvatars.appendChild(more);
+        }
+      }
+
+      //=================== auth  ============================
+      function showAuthToast() {
+        authToast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => authToast.classList.remove("show"), 4000);
+      }
+
+      //===================== socket ===============
+      const socket = io();
+
+      socket.on("server:checkbox-change", ({ index, checked }) => {
+        const cb = document.getElementById(`cb-${index}`);
+        if (cb) {
+          cb.checked = checked;
+          recount();
         }
       });
+
+      socket.on("server:users-update", updateOnlineUsers);
+
+      socket.on("server:auth-required", showAuthToast);
+
+      //============ load ==========================
+      loadUser();
+      initCheckboxes();
     </script>
   </body>
 </html>
