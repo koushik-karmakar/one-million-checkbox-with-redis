@@ -1,77 +1,108 @@
+import "dotenv/config";
 import http from "node:http";
 import path from "node:path";
 import express from "express";
+import cookieParser from "cookie-parser";
 import { Server } from "socket.io";
-import { stat } from "node:fs";
 import {
   redisSubscriber,
   redisPublisher,
   redisClient,
 } from "./redis_connection.js";
+import { sessionMiddleware, setupAuthRoutes, getSession } from "./auth.js";
 
 (async function startServer() {
   const app = express();
   const server = http.createServer(app);
+  const io = new Server(server);
 
-  // ===============  socket connection setup=================
-  const io = new Server();
-  io.attach(server);
-  const CHECKBOX_SIZE = 100;
-  const CHECKBOX_KEY = "checkbox-state-key";
-  // const state = {
-  //   checkbox: new Array(CHECKBOX_SIZE).fill(false),
-  // };
-  //  =================== socker handler=================
-  io.on("connection", (socket) => {
-    console.log("a user connected with id: ", socket.id);
+  app.use(cookieParser());
+  app.use(sessionMiddleware);
+  setupAuthRoutes(app);
+  const CHECKBOX_SIZE = 10000;
+  const CHECKBOX_KEY = "checkbox:state";
+  const rateLimiter = new Map();
+  const onlineUsers = new Map();
+
+  await redisSubscriber.subscribe("checkbox:changes");
+  redisSubscriber.on("message", (_channel, message) => {
+    io.emit("server:checkbox-change", JSON.parse(message));
+  });
+
+  function broadcastUsers() {
+    const list = Array.from(onlineUsers.values());
+    io.emit("server:users-update", { count: list.length, users: list });
+  }
+
+  io.on("connection", async (socket) => {
+    console.log("connected:", socket.id);
+    const rawCookie = socket.handshake.headers.cookie ?? "";
+    const cookies = Object.fromEntries(
+      rawCookie.split(";").map((c) => {
+        const [k, ...v] = c.trim().split("=");
+        return [k?.trim(), decodeURIComponent(v.join("="))];
+      }),
+    );
+
+    const sessionData = await getSession(cookies.checkbox_session).catch(
+      () => null,
+    );
+
+    onlineUsers.set(socket.id, {
+      name: sessionData?.name ?? "Guest",
+      picture: sessionData?.picture ?? null,
+      isAuthenticated: !!sessionData,
+    });
+    broadcastUsers();
 
     socket.on("client:checkbox-change", async (data) => {
-      console.log({ ...data, socketId: socket.id });
+      const user = onlineUsers.get(socket.id);
 
-      // geting state from redis
-      const isRedisState = await redisClient.get(CHECKBOX_KEY);
-      if (isRedisState) {
-        const remoteData = JSON.parse(isRedisState);
-        remoteData[data.index] = data.checked;
-        await redisClient.set(CHECKBOX_KEY, JSON.stringify(remoteData));
-      } else {
-        await redisClient.set(
-          CHECKBOX_KEY,
-          JSON.stringify(new Array(CHECKBOX_SIZE).fill(false)),
-        );
+      if (!user?.isAuthenticated) {
+        socket.emit("server:auth-required");
+        return;
       }
+
+      const last = rateLimiter.get(socket.id) ?? 0;
+      if (Date.now() - last < 50) return;
+      rateLimiter.set(socket.id, Date.now());
+
+      const raw = await redisClient.get(CHECKBOX_KEY);
+      const state = raw
+        ? JSON.parse(raw)
+        : new Array(CHECKBOX_SIZE).fill(false);
+
+      state[data.index] = data.checked;
+      await redisClient.set(CHECKBOX_KEY, JSON.stringify(state));
+
       await redisPublisher.publish(
-        "internal:checkbox-change",
-        JSON.stringify({ ...data, socketId: socket.id }),
+        "checkbox:changes",
+        JSON.stringify({ index: data.index, checked: data.checked }),
       );
-      await redisSubscriber.subscribe("internal:checkbox-change");
-      await redisSubscriber.on("message", (channel, message) => {
-        if (channel === "internal:checkbox-change") {
-          const data = JSON.parse(message);
-          io.emit("server:checkbox-change", { ...data, socketId: socket.id });
-        }
-      });
+    });
+
+    socket.on("disconnect", () => {
+      onlineUsers.delete(socket.id);
+      rateLimiter.delete(socket.id);
+      broadcastUsers();
     });
   });
 
-  // ===============express setup==============
+  // ======== routes =====================
   app.use(express.static(path.resolve("./public")));
-  app.get("/health", (req, res) => {
-    res.status(200).send("Server is healthy");
-  });
-  app.get("/state", async (req, res) => {
-    const isRedisState = await redisClient.get(CHECKBOX_KEY);
-    if (isRedisState) {
-      const data = JSON.parse(isRedisState);
-      return res.status(200).json({ checkbox: data });
-    }
 
-    return res
-      .status(200)
-      .json({ checkbox: new Array(CHECKBOX_SIZE).fill(false) });
+  app.get("/state", async (_req, res) => {
+    const raw = await redisClient.get(CHECKBOX_KEY);
+    const checkbox = raw
+      ? JSON.parse(raw)
+      : new Array(CHECKBOX_SIZE).fill(false);
+    res.json({ checkbox });
   });
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+
+  app.get("/health", (_req, res) => res.send("OK"));
+
+  const PORT = process.env.PORT ?? 3000;
+  server.listen(PORT, () =>
+    console.log(`Checkbox server running on port ${PORT}`),
+  );
 })();
